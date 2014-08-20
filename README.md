@@ -1,6 +1,18 @@
-Usage:
-Android Debug Bridge version 1.0.31
+<H1>Extended Android Debug Bridge</H1>
+A script designed to make using adb with multiple devices easier.
 
+<H2>Features</H2>
+<ul>
+  <li>Provides a menu if you forget to specify a device when multiple devices are attached.</li>
+  <li>Provides the option to run the adb command on all attached devices</li>
+  <li>Allows pushing multiple files at once.</li>
+  <li>Easy assigning specific terminal sessions to a device</li>
+  <li>Naming devices</li>
+</ul>
+
+<H2>Usage</H2>
+<pre>
+Extended Android Debug Bridge
  -a                            - directs eadb to listen on all interfaces for a connection
  -d                            - directs command to the only connected USB device
                                  returns an error if more than one USB device is present.
@@ -138,11 +150,10 @@ eadb specific commands:
   wait (mode)                   - Waits until a specific mode is detected
   plogcat [package name]        - Runs logcat on a specific package name
   slogcat (-p package_name) search terms
+</pre>
 
-
-Install
-
-echo /path/to/eadb.functions >> ~/.bashrc
-source /path/to/eadb.functions
-or
+<H2>Install</H2>
+echo /path/to/eadb.functions >> ~/.bashrc<br/>
+source /path/to/eadb.functions<br/>
+<b>or</b><br/>
 source eadb.functions
