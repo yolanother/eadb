@@ -1,0 +1,215 @@
+function adb-push-with-devid {
+    device=$1
+    shift
+    shift
+    last="${@: -1}"
+    for file in "${@:1:($#-1)}"; do
+        echo "Pushing $file->$device:$last"
+        adb -s $device push "$file" "$last"
+    done
+}
+
+function eadb-select {
+    dids=`adb devices 2>&1 | /bin/grep 'sideload$\|device$\|recovery$' | /bin/grep -o "^[a-fA-F0-9]*"`
+    if [ `echo "$dids" | wc -l` == "1" ]; then
+        name=`cat "$HOME/.eadb/$dids" 2>/dev/null`
+        if [ -n "$name" ]; then
+            echo "Only one device found using $name ($dids)" >&2
+        else
+            echo "Only one device found using $dids" >&2
+        fi
+        devid[0]="$dids"
+        DEVICE=0
+        DEV="$dids"
+        echo -n $DEV
+        return
+    fi
+
+    echo "Please select a device:" >&2
+    if [ "$1" == "true" ]; then
+        echo "  a) Run on all devices" >&2
+    fi
+    devs=`adb devices 2>&1 | /bin/grep 'sideload$\|device$\|recovery$' | sed 's/.\(sideload\|device\|recovery\)/~\1/g'`
+    d=1
+    for line in $devs; do
+        if [ "device" != "$line" ] && [ "recovery" != "$line" ] && [ "sideload" != "$line" ] && [ -n "$line"  ] ; then
+            mode[$d]=`echo "$line" | /bin/grep -o '~.*' | sed 's/^~//'`
+            line=`echo "$line" | sed 's/~.*//'`
+            devid[$d]="$line"
+            if [ "${mode[$d]}" == "device" ]; then
+                mod=`adb -s $line shell getprop ro.product.model`
+            else
+                mod=""
+            fi
+            modid[$d]="$mod"
+            if [ -f "$HOME/.eadb/$line" ]; then
+                name=`cat "$HOME/.eadb/$line"`
+                echo "  $d) $name - $line $mod" >&2
+            else
+                echo "  $d) $line $mod" >&2 
+            fi
+            d=`expr $d + 1`
+        fi
+    done
+    if [ "$d" == "2" ]; then
+        DEV=${devid[1]}
+    else
+        read -p "  Device Number: " DEVICE
+        DEV=${devid[$DEVICE]}
+    fi
+    echo -n "$DEV"
+}
+
+function eadb {
+    if [ "$1" == "shell" ] && [ "$2" == "pull" ]; then
+        shift
+    fi
+
+    if [ "$1" == "shell" ] && [ "$2" == "push" ]; then
+        shift
+    fi
+
+    if [ "$1" == "unsetdefault" ]; then
+        unset ADB_DEFAULT_DEVICE
+        unset ADB_DEFAULT_MODEL
+    elif [ "$1" == "devices" ] || [ "$1" == "connect" ] || [ "$1" == "disconnect" ] || [ "$1" == '-s' ] || [ "$1" == "$d" ]; then
+        if [ "-s" == "$1" ] && [ "$3" == "push" ]; then
+            shift
+            devid=$1
+            shift
+            adb-push-with-devid $devid "$@"
+        else
+            echo "Only one device is active."
+            adb "$@"
+        fi
+    elif [ "slogcat" == "$1" ]; then
+        shift
+        if [ "$1" == "-p" ]; then
+            shift
+            command="plogcat $1"
+            shift
+        else
+            command=logcat
+        fi
+
+
+        lcparams=`echo $@ | grep -o "[a-zA-Z0-9]*:[A-Z]"`
+        search=`echo "$@" | sed 's/[A-Za-z0-9]*:[A-Z]//g' | sed 's/ /\\\\|[IDWEV]\//g' | sed 's/\\\\|\[IDWEV\]\/$//g'`
+        if [ -z "$search" ]; then
+            eadb $command $lcparams
+        else
+            eadb $command $lcparams | grep "E/AndroidRuntime\|[IDWEV]/$search"
+        fi
+    elif [ "plogcat" == "$1" ]; then
+        shift
+        device=$(eadb-select)
+        adb -s $device logcat | /bin/grep `adb -s $device shell ps | /bin/grep $1 | cut -c10-15`
+    elif [ "name" == "$1" ]; then
+        device=$(eadb-select)
+        read -p "Please provide a name for $device: " NAME
+        if [ ! -d $HOME/.eadb ]; then
+            mkdir $HOME/.eadb 2>/dev/null
+        fi
+        echo "$NAME" > $HOME/.eadb/$device
+    elif [ "wait" == "$1" ]; then
+        shift
+        devid=""
+        type="device"
+        if [ "$1" == "-s" ]; then
+           devid="$2"
+            if [ -n "$3" ]; then
+                type="$3"
+            fi
+        else
+            if [ -n "$1" ]; then
+                type="$1"
+            fi
+        fi
+        devinfo=`adb devices | /bin/grep -v "List of devices attached\|Only one device" | /bin/grep . | /bin/grep "$devid" | /bin/grep "$type" `
+        if [ -z "$devinfo" ]; then
+            sleep .5
+            eadb wait $*
+       fi
+    elif [ "help" == "$1" ] || [ "-h" == "$1" ] || [ "--help" == "$1" ] || [ -z "$1" ]; then
+            adb -h
+            echo
+            echo "eadb specific commands:"
+            echo "  setdefault                    - Makes a device from the list the default device when running eadb."
+            echo "  unsetdefault                  - Allows the prompt to show up if there are more than one devices."
+            echo "  toggle-silent                 - Shows/hides the device sn/name when using a default device."
+            echo "  show-default                  - Shows the current default device"
+            echo "  name                          - Stores a name for a device"
+            echo "  wait (mode)                   - Waits until a specific mode is detected"
+            echo "  plogcat [package name]        - Runs logcat on a specific package name"
+            echo "  slogcat (-p package_name) search terms"
+    else
+        if [ -n "$ADB_DEFAULT_DEVICE" ] && [ "$1" != "setdefault" ]; then
+            if [ -z "$EADB_SILENCE_DEFAULT_PROMPT" ]; then
+                echo "Using default device $ADB_DEFAULT_DEVICE $ADB_DEFAULT_MODEL" >&2
+            fi
+            if [ "push" == "$1" ] && [ -n "$ADB_DEFAULT_DEVICE" ]; then
+                adb-push-with-devid $ADB_DEFAULT_DEVICE "$@"
+            else
+                adb -s $ADB_DEFAULT_DEVICE "$@"
+            fi
+        elif [ "show-default" == "$1" ]; then
+            if [ -z "$ADB_DEFAULT_DEVICE" ]; then
+                echo "No default device is currently set."
+            else
+                echo "Using default device $ADB_DEFAULT_DEVICE $ADB_DEFAULT_MODEL"
+            fi
+        elif [ "toggle-silent" == "$1" ]; then
+            if [ -z "$EADB_SILENCE_DEFAULT_PROMPT" ]; then
+                EADB_SILENCE_DEFAULT_PROMPT=true
+            else
+                unset EADB_SILENCE_DEFAULT_PROMPT
+            fi
+        else
+            alldevs=`adb devices | /bin/grep -v 'List of devices'`
+            devs=`adb devices | /bin/grep 'recovery\|device$'`
+        
+            if [ -z "`echo "$@" | /bin/grep '\-s'`" ] && [ "`echo "$alldevs" | wc -l`" != "1" ]; then
+                eadb-select "true" >/dev/null
+                if [ "$1" == "setdefault" ]; then
+                    export ADB_DEFAULT_DEVICE=${devid[$DEVICE]}
+                    export ADB_DEFAULT_MODEL=`adb -s ${devid[$DEVICE]} shell getprop ro.product.model`
+                else
+                    if [ "$DEVICE" == "a" ] || [ "$DEVICE" == "all" ]; then
+                        count="${#devid[@]}"
+                        for i in $(seq 1 $count); do    
+                            device=${devid[$i]}
+                            if [ -z "$EADB_SILENCE_DEFAULT_PROMPT" ]; then
+                                echo "Running on $device ${modid[$i]}"
+                            fi
+                            if [ "$1" == "push" ]; then
+                                adb-push-with-devid $device "$@"
+                            else
+                                adb -s $device "$@"
+                            fi
+                        done
+                    else
+                        if [ "$1" == "push" ]; then
+                            adb-push-with-devid ${devid[$DEVICE]} "$@"
+                        else
+                            adb -s ${devid[$DEVICE]} "$@"
+                        fi
+                    fi
+                fi
+            else
+                if [ "$1" == "setdefault" ]; then
+                    export ADB_DEFAULT_DEVICE=`adb devices | /bin/grep 'recovery\|device$' | sed 's/ *device\|recovery//g'`
+                    export ADB_DEFAULT_MODEL=`adb shell getprop ro.product.model`
+                else
+                    if [ "$1" == "push" ]; then
+                        shift
+                        device=`adb devices | /bin/grep 'device$\|recovery$' | sed 's/ *device//g'`
+                        adb-push-with-devid $device "$@"
+                    else
+                        adb "$@"
+                    fi
+                fi
+            fi
+        fi
+    fi
+}
+
