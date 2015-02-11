@@ -1,3 +1,5 @@
+[ -n "$BASH_VERSION" ] || [ -n "$ZSH_VERSION" ] || return
+
 function adb-push-with-devid {
     device=$1
     shift
@@ -10,7 +12,7 @@ function adb-push-with-devid {
 }
 
 function eadb-select {
-    dids=`adb devices 2>&1 | /bin/grep 'sideload$\|device$\|recovery$' | /bin/grep -o "^[a-fA-F0-9]*"`
+    dids=`adb devices 2>&1 | /bin/grep 'sideload$\|device$\|recovery$' | /bin/grep -o "^[a-zA-Z0-9]*"`
     if [ `echo "$dids" | wc -l` == "1" ]; then
         name=`cat "$HOME/.eadb/$dids" 2>/dev/null`
         if [ -n "$name" ]; then
@@ -82,6 +84,20 @@ function eadb {
             echo "Only one device is active."
             adb "$@"
         fi
+    elif [ "screenshot" == "$1" ]; then
+        shift
+        if [ -z "$1" ]; then
+           echo "Usage: eadb screenshot /path/to/screenshot.png"
+        else
+            device=$(eadb-select)
+            tmp=`mktemp`
+            echo "Grabbing screenshot..."
+            echo -n "  "
+            adb -s $device shell screencap -p /sdcard/`basename $tmp`
+            adb -s $device pull /sdcard/`basename $tmp` $1
+            adb -s $device shell rm /sdcard/`basename $tmp`
+            echo "  Screenshot stored in $1"
+        fi
     elif [ "slogcat" == "$1" ]; then
         shift
         if [ "$1" == "-p" ]; then
@@ -141,7 +157,9 @@ function eadb {
             echo "  name                          - Stores a name for a device"
             echo "  wait (mode)                   - Waits until a specific mode is detected"
             echo "  plogcat [package name]        - Runs logcat on a specific package name"
+            echo "  install-mirroring             - Installs chromecast mirroring support on rooted device"
             echo "  slogcat (-p package_name) search terms"
+            echo "  screenshot                    - Grabs a screenshot"
     else
         if [ -n "$ADB_DEFAULT_DEVICE" ] && [ "$1" != "setdefault" ]; then
             if [ -z "$EADB_SILENCE_DEFAULT_PROMPT" ]; then
@@ -152,6 +170,13 @@ function eadb {
             else
                 adb -s $ADB_DEFAULT_DEVICE "$@"
             fi
+        elif [ "$1" == "install-mirroring" ]; then
+        	device=`eadb-select`
+			adb -s $device shell sqlite3 /data/data/com.google.android.gsf/databases/gservices.db "INSERT INTO overrides (name, value) VALUES ('gms:cast:mirroring_enabled', 'true');"
+			adb -s $device shell sqlite3 /data/data/com.google.android.gsf/databases/gservices.db "UPDATE overrides SET value='true' WHERE name='gms:cast:mirroring_enabled';"
+			adb -s $device shell am force-stop com.google.android.gsf
+			adb -s $device shell am force-stop com.google.android.gms
+			adb -s $device shell am force-stop com.google.android.apps.chromecast.app
         elif [ "show-default" == "$1" ]; then
             if [ -z "$ADB_DEFAULT_DEVICE" ]; then
                 echo "No default device is currently set."
