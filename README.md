@@ -150,6 +150,7 @@ eadb specific commands:
   wait (mode)                   - Waits until a specific mode is detected
   plogcat [package name]        - Runs logcat on a specific package name
   slogcat (-p package_name) search terms
+  screenshot                    - Grabs a screenshot
 </pre>
 
 <H2>Install</H2>
