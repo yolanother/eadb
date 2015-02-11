@@ -154,7 +154,8 @@ eadb specific commands:
 </pre>
 
 <H2>Install</H2>
-echo /path/to/eadb.functions >> ~/.bashrc<br/>
-source /path/to/eadb.functions<br/>
+To have eadb run every time you open a terminal, add it to your bashrc:<br/>
+  echo ". /path/to/eadb.functions" >> ~/.bashrc<br/>
 <b>or</b><br/>
-source eadb.functions
+Source the file directly to add eadb to your current terminal<br/>
+source /path/to/eadb.functions
