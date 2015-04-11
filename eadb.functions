@@ -119,7 +119,13 @@ function eadb {
     elif [ "plogcat" == "$1" ]; then
         shift
         device=$(eadb-select)
-        adb -s $device logcat | /bin/grep `adb -s $device shell ps | /bin/grep $1 | cut -c10-15`
+	pid=`adb -s $device shell ps | /bin/grep $1 | cut -c10-15 | tail -n1`
+	echo "$1: Process $pid"
+	if [ -n "$pid" ]; then
+        	adb -s $device logcat | /bin/grep '$pid'
+	else
+		echo "Process is not currently running."
+	fi
     elif [ "name" == "$1" ]; then
         device=$(eadb-select)
         read -p "Please provide a name for $device: " NAME
