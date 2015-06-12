@@ -63,6 +63,11 @@ function eadb-select {
 }
 
 function eadb {
+    if [ -z "$1" ]; then
+        eadb help
+        return;
+    fi
+
     if [ "$1" == "shell" ] && [ "$2" == "pull" ]; then
         shift
     fi
@@ -83,6 +88,19 @@ function eadb {
         else
             echo "Only one device is active."
             adb "$@"
+        fi
+    elif [ "start" == "$1" ]; then
+        shift
+        if [ -z "$1" ]; then
+            echo "Usage: eadb start application.package.name (applaction.package.name.activity)"
+        else
+            device=$(eadb-select)
+            adb -s $device wait-for-device
+            if [ -z "$2" ]; then
+                adb shell am start -a android.intent.action.MAIN -n $1
+            else
+                adb shell am start -n $1/$2
+            fi
         fi
     elif [ "screenshot" == "$1" ]; then
         shift
@@ -166,6 +184,9 @@ function eadb {
             echo "  install-mirroring             - Installs chromecast mirroring support on rooted device"
             echo "  slogcat (-p package_name) search terms"
             echo "  screenshot                    - Grabs a screenshot"
+            echo "  start                         - Start either the default activity or a specified activity"
+            echo "  input-text                    - Enter text on the device"
+            echo "  input-key                     - Send a key or set of keys"
     else
         if [ -n "$ADB_DEFAULT_DEVICE" ] && [ "$1" != "setdefault" ]; then
             if [ -z "$EADB_SILENCE_DEFAULT_PROMPT" ]; then
@@ -189,6 +210,12 @@ function eadb {
             else
                 echo "Using default device $ADB_DEFAULT_DEVICE $ADB_DEFAULT_MODEL"
             fi
+        elif [ "input-text" == "$1" ]; then
+            shift
+		    eadb shell input text $*
+        elif [ "input-key" == "$1" ]; then
+            shift
+            eadb shell input keyevent $*
         elif [ "toggle-silent" == "$1" ]; then
             if [ -z "$EADB_SILENCE_DEFAULT_PROMPT" ]; then
                 EADB_SILENCE_DEFAULT_PROMPT=true
@@ -196,10 +223,10 @@ function eadb {
                 unset EADB_SILENCE_DEFAULT_PROMPT
             fi
         else
-            alldevs=`adb devices | /bin/grep -v 'List of devices'`
-            devs=`adb devices | /bin/grep 'recovery\|device$'`
+            alldevs=`adb devices | grep 'recovery\|device$' | awk '{print $1}'`
+            devs=`adb devices | grep 'recovery\|device$' | awk '{print $1}'`
         
-            if [ -z "`echo "$@" | /bin/grep '\-s'`" ] && [ "`echo "$alldevs" | wc -l`" != "1" ]; then
+            if [ -z "`echo "$@" | /bin/grep 'adb[ ]*\-s'`" ] && [ "`echo "$alldevs" | wc -l`" != "1" ]; then
                 eadb-select "true" >/dev/null
                 if [ "$1" == "setdefault" ]; then
                     export ADB_DEFAULT_DEVICE=${devid[$DEVICE]}
@@ -209,20 +236,22 @@ function eadb {
                         count="${#devid[@]}"
                         for i in $(seq 1 $count); do    
                             device=${devid[$i]}
-                            if [ -z "$EADB_SILENCE_DEFAULT_PROMPT" ]; then
-                                echo "Running on $device ${modid[$i]}"
-                            fi
-                            if [ "$1" == "push" ]; then
-                                adb-push-with-devid $device "$@"
-                            else
-                                adb -s $device "$@"
+                            if [ -n "$device" ]; then
+                                if [ -z "$EADB_SILENCE_DEFAULT_PROMPT" ]; then
+                                    echo "Running on $device ${modid[$i]}"
+                                fi
+                                if [ "$1" == "push" ]; then
+                                    adb-push-with-devid $device $*
+                                else
+                                    adb -s $device $*
+                                fi
                             fi
                         done
                     else
                         if [ "$1" == "push" ]; then
-                            adb-push-with-devid ${devid[$DEVICE]} "$@"
+                            adb-push-with-devid ${devid[$DEVICE]} $*
                         else
-                            adb -s ${devid[$DEVICE]} "$@"
+                            adb -s ${devid[$DEVICE]} $*
                         fi
                     fi
                 fi
@@ -234,9 +263,10 @@ function eadb {
                     if [ "$1" == "push" ]; then
                         shift
                         device=`adb devices | /bin/grep 'device$\|recovery$' | sed 's/ *device//g'`
-                        adb-push-with-devid $device "$@"
+                        adb-push-with-devid $device $*
                     else
-                        adb "$@"
+                        echo "Stock adb"
+                        adb $*
                     fi
                 fi
             fi
