@@ -1,18 +1,22 @@
 [ -n "$BASH_VERSION" ] || [ -n "$ZSH_VERSION" ] || return
 
 function adb-push-with-devid {
-    device=$1
+    local device=$1
     shift
     shift
-    last="${@: -1}"
+    local last="${@: -1}"
     for file in "${@:1:($#-1)}"; do
-        echo "Pushing $file->$device:$last"
+        echo -n 'Pushing '
+		echo -n $file
+		echo -n '->'
+		echo "$device:$last"
+		echo -n "  "
         adb -s $device push "$file" "$last"
     done
 }
 
 function eadb-select {
-    dids=`adb devices 2>&1 | /bin/grep 'sideload$\|device$\|recovery$' | /bin/grep -o "^[a-zA-Z0-9]*"`
+    local dids=`adb devices 2>&1 | /bin/grep 'sideload$\|device$\|recovery$' | awk '{print $1}'`
     if [ `echo "$dids" | wc -l` == "1" ]; then
         name=`cat "$HOME/.eadb/$dids" 2>/dev/null`
         if [ -n "$name" ]; then
@@ -31,8 +35,8 @@ function eadb-select {
     if [ "$1" == "true" ]; then
         echo "  a) Run on all devices" >&2
     fi
-    devs=`adb devices 2>&1 | /bin/grep 'sideload$\|device$\|recovery$' | sed 's/.\(sideload\|device\|recovery\)/~\1/g'`
-    d=1
+    local devs=`adb devices 2>&1 | /bin/grep 'sideload$\|device$\|recovery$' | sed 's/.\(sideload\|device\|recovery\)/~\1/g'`
+    local d=1
     for line in $devs; do
         if [ "device" != "$line" ] && [ "recovery" != "$line" ] && [ "sideload" != "$line" ] && [ -n "$line"  ] ; then
             mode[$d]=`echo "$line" | /bin/grep -o '~.*' | sed 's/^~//'`
@@ -53,13 +57,17 @@ function eadb-select {
             d=`expr $d + 1`
         fi
     done
+
     if [ "$d" == "2" ]; then
-        DEV=${devid[1]}
+        echo -n "${devid[1]}"
     else
-        read -p "  Device Number: " DEVICE
-        DEV=${devid[$DEVICE]}
+        read -p "  Device Number: " device
+		if [ "a" == "$device" ]; then
+			adb devices 2>&1 | /bin/grep 'sideload$\|device$\|recovery$' | awk '{print $1}'
+		else
+	        echo "${devid[$device]}"
+		fi
     fi
-    echo -n "$DEV"
 }
 
 function eadb {
@@ -76,18 +84,25 @@ function eadb {
         shift
     fi
 
-    if [ "$1" == "unsetdefault" ]; then
+	if [ "$1" == "--shortlist" ]; then
+		echo "`adb 2>&1 | /bin/grep -o '^  adb [^ ]*' | sed 's/^  adb //g' | sort | uniq | tr "\\n" " "` setdefault unsetdefault toggle-silent show-default name wait plogcat install-mirroring slogcat screenshot start input-text input-key"
+    elif [ "$1" == "unsetdefault" ]; then
         unset ADB_DEFAULT_DEVICE
         unset ADB_DEFAULT_MODEL
+	elif [ "$1" == "model" ]; then
+		if [ -z "$2" ]; then
+			eadb-select true | xargs -i adb -s {} shell getprop ro.product.model
+		else
+			adb -s "$2" shell getprop ro.product.model
+		fi
     elif [ "$1" == "devices" ] || [ "$1" == "connect" ] || [ "$1" == "disconnect" ] || [ "$1" == '-s' ] || [ "$1" == "$d" ]; then
         if [ "-s" == "$1" ] && [ "$3" == "push" ]; then
             shift
-            devid=$1
+            local devid=$1
             shift
-            adb-push-with-devid $devid "$@"
+            adb-push-with-devid $devid $*
         else
-            echo "Only one device is active."
-            adb "$@"
+            adb $*
         fi
     elif [ "start" == "$1" ]; then
         shift
@@ -95,11 +110,11 @@ function eadb {
             echo "Usage: eadb start application.package.name (applaction.package.name.activity)"
         else
             device=$(eadb-select)
-            adb -s $device wait-for-device
+            adb wait-for-device 2>/dev/null
             if [ -z "$2" ]; then
-                adb shell am start -a android.intent.action.MAIN -n $1
+                echo $device | xargs -i adb -s {} shell am start -a android.intent.action.MAIN -n $1
             else
-                adb shell am start -n $1/$2
+                echo $device | xargs -i adb -s {} shell am start -n $1/$2
             fi
         fi
     elif [ "screenshot" == "$1" ]; then
@@ -111,9 +126,9 @@ function eadb {
             tmp=`mktemp`
             echo "Grabbing screenshot..."
             echo -n "  "
-            adb -s $device shell screencap -p /sdcard/`basename $tmp`
-            adb -s $device pull /sdcard/`basename $tmp` $1
-            adb -s $device shell rm /sdcard/`basename $tmp`
+            echo $device | xargs -i adb -s {} shell screencap -p /sdcard/`basename $tmp`
+            echo $device | xargs -i adb -s {} pull /sdcard/`basename $tmp` $1
+            echo $device | xargs -i adb -s {} shell rm /sdcard/`basename $tmp`
             echo "  Screenshot stored in $1"
         fi
     elif [ "slogcat" == "$1" ]; then
@@ -136,12 +151,12 @@ function eadb {
         fi
     elif [ "plogcat" == "$1" ]; then
         shift
-        device=$(eadb-select)
-	pid=`adb -s $device shell ps | /bin/grep $1 | cut -c10-15 | tail -n1`
-	echo "$1: Process $pid"
-	if [ -n "$pid" ]; then
-        	adb -s $device logcat | /bin/grep '$pid'
-	else
+        device=$(eadb-select true)
+		pid="`adb -s $device shell ps | /bin/grep $1 | awk '{print $2}' | sed 's/\n/|/g' | tr "\\n" " " | sed "s/ $/\n/g" | sed "s/ /\\\\\\|/g"`"
+		echo "$1: Process $pid"
+		if [ -n "$pid" ]; then
+        	adb -s $device logcat | /bin/grep "$pid"
+		else
 		echo "Process is not currently running."
 	fi
     elif [ "name" == "$1" ]; then
@@ -222,55 +237,41 @@ function eadb {
             else
                 unset EADB_SILENCE_DEFAULT_PROMPT
             fi
+		elif [ "setdefault" == "$1" ]; then
+	        export ADB_DEFAULT_DEVICE=`eadb-select true`
+		elif [ "$1" == "push" ]; then
+			for device in `eadb-select true`; do
+				adb-push-with-devid $device $*
+			done
+		elif [ -n "$ADB_DEFAULT_DEVICE" ]; then
+			if [ "$EADB_SILENCE_DEFAULT_PROMPT" != "true" ]; then
+				echo "Running on: $ADB_DEFAULT_DEVICE"
+			fi
+			echo "$ADB_DEFAULT_DEVICE" | xargs -i adb -s {} $*
         else
-            alldevs=`adb devices | grep 'recovery\|device$' | awk '{print $1}'`
-            devs=`adb devices | grep 'recovery\|device$' | awk '{print $1}'`
-        
-            if [ -z "`echo "$@" | /bin/grep 'adb[ ]*\-s'`" ] && [ "`echo "$alldevs" | wc -l`" != "1" ]; then
-                eadb-select "true" >/dev/null
-                if [ "$1" == "setdefault" ]; then
-                    export ADB_DEFAULT_DEVICE=${devid[$DEVICE]}
-                    export ADB_DEFAULT_MODEL=`adb -s ${devid[$DEVICE]} shell getprop ro.product.model`
-                else
-                    if [ "$DEVICE" == "a" ] || [ "$DEVICE" == "all" ]; then
-                        count="${#devid[@]}"
-                        for i in $(seq 1 $count); do    
-                            device=${devid[$i]}
-                            if [ -n "$device" ]; then
-                                if [ -z "$EADB_SILENCE_DEFAULT_PROMPT" ]; then
-                                    echo "Running on $device ${modid[$i]}"
-                                fi
-                                if [ "$1" == "push" ]; then
-                                    adb-push-with-devid $device $*
-                                else
-                                    adb -s $device $*
-                                fi
-                            fi
-                        done
-                    else
-                        if [ "$1" == "push" ]; then
-                            adb-push-with-devid ${devid[$DEVICE]} $*
-                        else
-                            adb -s ${devid[$DEVICE]} $*
-                        fi
-                    fi
-                fi
-            else
-                if [ "$1" == "setdefault" ]; then
-                    export ADB_DEFAULT_DEVICE=`adb devices | /bin/grep 'recovery\|device$' | sed 's/ *device\|recovery//g'`
-                    export ADB_DEFAULT_MODEL=`adb shell getprop ro.product.model`
-                else
-                    if [ "$1" == "push" ]; then
-                        shift
-                        device=`adb devices | /bin/grep 'device$\|recovery$' | sed 's/ *device//g'`
-                        adb-push-with-devid $device $*
-                    else
-                        echo "Stock adb"
-                        adb $*
-                    fi
-                fi
-            fi
+            eadb-select true | xargs -i adb -s {} $*
         fi
     fi
 }
+
+_eadbcompletescript()
+{
+ 	local path="`dirname $(readlink -f $0)`"
+	_script_commands=$(eadb --shortlist)
+
+	local cur prev
+	COMPREPLY=()
+	cur="${COMP_WORDS[COMP_CWORD]}"
+	prev="${COMP_WORDS[COMP_CWORD - 1]}"
+	if [ "push" == "$prev" ]; then
+		COMPREPLY=( $(compgen -W "`ls -d ${cur}*`" -- ${cur}) )
+	elif [ "pull" == "$prev" ]; then
+		COMPREPLY=( $(compgen -W "`adb shell 'ls -F ${cur} 2>/dev/null' | sed 's/\r//g' | sed 's_^\(ld\|d\) \(.*\)_\2_' | sed 's/^[-l?]* //g' | sort | uniq | tr "\\n" " "`" -- ${cur}) )
+	else
+		COMPREPLY=( $(compgen -W "${_script_commands}" -- ${cur}) )
+	fi
+
+	return 0
+}
+complete -o filenames -F _eadbcompletescript eadb
 
