@@ -148,9 +148,15 @@ eadb specific commands:
   show-default                  - Shows the current default device
   name                          - Stores a name for a device
   wait (mode)                   - Waits until a specific mode is detected
+  clogcat                       - Runs a colorized logcat
   plogcat [package name]        - Runs logcat on a specific package name
+  install-mirroring             - Installs chromecast mirroring support on rooted device
   slogcat (-p package_name) search terms
   screenshot                    - Grabs a screenshot
+  start                         - Start either the default activity or a specified activity
+  input-text                    - Enter text on the device
+  input-key                     - Send a key or set of keys
+
 </pre>
 
 <H2>Install</H2>
