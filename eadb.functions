@@ -70,6 +70,75 @@ function eadb-select {
     fi
 }
 
+function clogcat-disable-timing {
+	if [ -f "$HOME/.eadb.logcat" ]; then
+		sed -i '/THREADTIME/d' $HOME/.eadb.logcat
+	fi
+}
+
+function clogcat-enable-timing {
+	clogcat-disable-timing
+	echo 'THREADTIME="-v threadtime"' >> $HOME/.eadb.logcat
+}
+
+function clogcat-always-log-clear {
+	if [ -f "$HOME/.eadb.logcat" ]; then
+		sed -i '/LOGCAT_ALWAYSLOG/d' $HOME/.eadb.logcat
+	fi
+}
+
+function clogcat-always-log {
+	clogcat-always-log-clear
+	echo "LOGCAT_ALWAYSLOG=\"$1\"" >> $HOME/.eadb.logcat
+}
+
+function clogcat {
+	if [ -f "$HOME/.eadb.logcat" ]; then
+		source "$HOME/.eadb.logcat"
+	fi
+
+	cmd="eadb logcat $THREADTIME"
+
+	if [ "$1" == "plogcat" ] || [ "$1" == "plog" ]; then
+		shift
+		if [ -n "$2" ]; then
+			cmd="eadb plogcat $2"
+			shift
+		fi
+	fi
+
+	if [ "$1" == "-" ]; then
+		cmd="read log"
+		shift
+	elif [ "http" == "${1:0:4}" ]; then
+		local filename="`echo $1 | sed 's/\//_/g'`"
+		if [ ! -f "/tmp/$filename" ]; then
+			curl $1 > "/tmp/$filename"
+			if [ -n "`grep "<title>401 - Unauthorized: Access is denied due to invalid credentials.</title>" /tmp/$filename`" ]; then
+				echo "Access denied. Could not retrieve log."
+				rm "/tmp/$filename"
+				return
+			fi
+		fi
+		cmd="cat /tmp/$filename"
+		shift
+	fi
+
+	if [ -n "$THREADTIME" ]; then
+		if [ -n "$1" ]; then
+			$cmd | grep --color=never --line-buffered "E AndroidRuntime\|E ActivityThread\|W System.err\|$LOGCAT_ALWAYSLOG\|`implode "\|" $*`" | GREP_COLOR="1;31" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *E[^:]*: \|$" | GREP_COLOR="1;33" grep --line-buffered --color=always "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *W[^:]*: \|$" | GREP_COLOR="1;32" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *D[^:]*: \|$" | GREP_COLOR="1;34" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *I[^:]*: \|$" | GREP_COLOR="1;36" grep --color=always --line-buffered "`implode "\|" $*`\|$" | GREP_COLOR="1;35" grep --color=always --line-buffered "$LOGCAT_ALWAYSLOG\|$"
+		else
+			$cmd | grep --color=never --line-buffered "E AndroidRuntime\|E ActivityThread\|W System.err\|$LOGCAT_ALWAYSLOG" | GREP_COLOR="1;31" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *E[^:]*: \|$" | GREP_COLOR="1;33" grep --line-buffered --color=always "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *W[^:]*: \|$" | GREP_COLOR="1;32" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *D[^:]*: \|$" | GREP_COLOR="1;34" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *I[^:]*: \|$" | GREP_COLOR="1;35" grep --color=always --line-buffered "$LOGCAT_ALWAYSLOG\|$"
+		fi
+	else
+		if [ -n "$1" ]; then
+			$cmd | grep --color=never --line-buffered "E/AndroidRuntime\|E/ActivityThread\|W/System.err\|$LOGCAT_ALWAYSLOG\|`implode "\|" $*`" | GREP_COLOR="1;31" grep --color=always --line-buffered "E/[^:]*: \|$" | GREP_COLOR="1;33" grep --line-buffered --color=always "W/[^:]*: \|$" | GREP_COLOR="1;32" grep --color=always --line-buffered "D/[^:]*: \|$" | GREP_COLOR="1;90" grep --color=always --line-buffered "V/[^:]*: \|$" | GREP_COLOR="1;34" grep --color=always --line-buffered "I/[^:]*: \|$" | GREP_COLOR="1;36" grep --color=always --line-buffered "`implode "\|" $*`\|$" | GREP_COLOR="1;35" grep --color=always --line-buffered "$LOGCAT_ALWAYSLOG\|$"
+		else
+			$cmd | grep --color=never --line-buffered "E/AndroidRuntime\|E/ActivityThread\|W/System.err\|$LOGCAT_ALWAYSLOG" | GREP_COLOR="1;31" grep --color=always --line-buffered "E/[^:]*: \|$" | GREP_COLOR="1;33" grep --line-buffered --color=always "W/[^:]*: \|$" | GREP_COLOR="1;32" grep --color=always --line-buffered "D/[^:]*: \|$" | GREP_COLOR="1;90" grep --color=always --line-buffered "V/[^:]*: \|$" | GREP_COLOR="1;34" grep --color=always --line-buffered "I/[^:]*: \|$" | GREP_COLOR="1;35" grep --color=always --line-buffered "$LOGCAT_ALWAYSLOG\|$"
+		fi
+	fi
+}
+
 function eadb {
     if [ -z "$1" ]; then
         eadb help
@@ -85,7 +154,7 @@ function eadb {
     fi
 
 	if [ "$1" == "--shortlist" ]; then
-		echo "`adb 2>&1 | /bin/grep -o '^  adb [^ ]*' | sed 's/^  adb //g' | sort | uniq | tr "\\n" " "` setdefault unsetdefault toggle-silent show-default name wait plogcat install-mirroring slogcat screenshot start input-text input-key"
+		echo "`adb 2>&1 | /bin/grep -o '^  adb [^ ]*' | sed 's/^  adb //g' | sort | uniq | tr "\\n" " "` setdefault unsetdefault toggle-silent show-default name wait plogcat install-mirroring slogcat screenshot start input-text input-key clogcat"
     elif [ "$1" == "unsetdefault" ]; then
         unset ADB_DEFAULT_DEVICE
         unset ADB_DEFAULT_MODEL
@@ -195,6 +264,7 @@ function eadb {
             echo "  show-default                  - Shows the current default device"
             echo "  name                          - Stores a name for a device"
             echo "  wait (mode)                   - Waits until a specific mode is detected"
+            echo "  clogcat                       - Runs a colorized logcat"
             echo "  plogcat [package name]        - Runs logcat on a specific package name"
             echo "  install-mirroring             - Installs chromecast mirroring support on rooted device"
             echo "  slogcat (-p package_name) search terms"
@@ -243,6 +313,9 @@ function eadb {
 			for device in `eadb-select true`; do
 				adb-push-with-devid $device $*
 			done
+		elif [ "clogcat" == "$1" ]; then
+			shift
+			clogcat $*
 		elif [ -n "$ADB_DEFAULT_DEVICE" ]; then
 			if [ "$EADB_SILENCE_DEFAULT_PROMPT" != "true" ]; then
 				echo "Running on: $ADB_DEFAULT_DEVICE"
