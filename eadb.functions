@@ -72,12 +72,18 @@ function eadb-select {
 
 function clogcat-disable-timing {
 	if [ -f "$HOME/.eadb.logcat" ]; then
+	    if [ "$1" != "-q" ]; then
+            echo "Disabling timing"
+        fi
 		sed -i '/THREADTIME/d' $HOME/.eadb.logcat
 	fi
 }
 
 function clogcat-enable-timing {
-	clogcat-disable-timing
+	clogcat-disable-timing -q
+    if [ "$1" != "-q" ]; then
+        echo "Enabling timing"
+    fi
 	echo 'THREADTIME="-v threadtime"' >> $HOME/.eadb.logcat
 }
 
@@ -96,13 +102,18 @@ function clogcat {
 	if [ -f "$HOME/.eadb.logcat" ]; then
 		source "$HOME/.eadb.logcat"
 	fi
+	
+	if [ "$(type -t clogcat$1)" = function ]; then
+	    clogcat$1
+	    return
+	fi
 
 	cmd="eadb logcat $THREADTIME"
 
 	if [ "$1" == "plogcat" ] || [ "$1" == "plog" ]; then
 		shift
 		if [ -n "$1" ]; then
-			cmd="eadb plogcat $1"
+			cmd="eadb plogcat $1 $THREADTIME"
 			shift
 		fi
 	fi
@@ -219,7 +230,7 @@ function eadb {
             eadb $command $lcparams | grep "E/AndroidRuntime\|[IDWEV]/$search"
         fi
     elif [ "plogcat" == "$1" ]; then
-        if [ -z "$1" ]; then
+        if [ -z "$2" ]; then
             echo "Usage: eadb plogcat com.some.package"
             return
         fi
@@ -227,8 +238,9 @@ function eadb {
         device=$(eadb-select true)
 		pid="`adb -s $device shell ps | /bin/grep $1 | awk '{print $2}' | sed 's/\n/|/g' | tr "\\n" " " | sed "s/ $/\n/g" | sed "s/ /\\\\\\|/g"`"
 		echo "$1: Process $pid"
+		shift
 		if [ -n "$pid" ]; then
-        	adb -s $device logcat | /bin/grep "$pid"
+        	adb -s $device logcat $* | /bin/grep "$pid"
 		else
 		echo "Process is not currently running."
 	fi
