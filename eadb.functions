@@ -101,8 +101,8 @@ function clogcat {
 
 	if [ "$1" == "plogcat" ] || [ "$1" == "plog" ]; then
 		shift
-		if [ -n "$2" ]; then
-			cmd="eadb plogcat $2"
+		if [ -n "$1" ]; then
+			cmd="eadb plogcat $1"
 			shift
 		fi
 	fi
@@ -219,6 +219,10 @@ function eadb {
             eadb $command $lcparams | grep "E/AndroidRuntime\|[IDWEV]/$search"
         fi
     elif [ "plogcat" == "$1" ]; then
+        if [ -z "$1" ]; then
+            echo "Usage: eadb plogcat com.some.package"
+            return
+        fi
         shift
         device=$(eadb-select true)
 		pid="`adb -s $device shell ps | /bin/grep $1 | awk '{print $2}' | sed 's/\n/|/g' | tr "\\n" " " | sed "s/ $/\n/g" | sed "s/ /\\\\\\|/g"`"
