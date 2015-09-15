@@ -135,19 +135,37 @@ function clogcat {
 		shift
 	fi
 
-	if [ -n "$THREADTIME" ]; then
-		if [ -n "$1" ]; then
-			$cmd | grep --color=never --line-buffered "E AndroidRuntime\|E ActivityThread\|W System.err\|$LOGCAT_ALWAYSLOG\|`implode "\|" $*`" | GREP_COLOR="1;31" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *E[^:]*: \|$" | GREP_COLOR="1;33" grep --line-buffered --color=always "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *W[^:]*: \|$" | GREP_COLOR="1;32" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *D[^:]*: \|$" | GREP_COLOR="1;34" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *I[^:]*: \|$" | GREP_COLOR="1;36" grep --color=always --line-buffered "`implode "\|" $*`\|$" | GREP_COLOR="1;35" grep --color=always --line-buffered "$LOGCAT_ALWAYSLOG\|$"
-		else
-			$cmd | grep --color=never --line-buffered "E AndroidRuntime\|E ActivityThread\|W System.err\|$LOGCAT_ALWAYSLOG" | GREP_COLOR="1;31" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *E[^:]*: \|$" | GREP_COLOR="1;33" grep --line-buffered --color=always "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *W[^:]*: \|$" | GREP_COLOR="1;32" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *D[^:]*: \|$" | GREP_COLOR="1;34" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *I[^:]*: \|$" | GREP_COLOR="1;35" grep --color=always --line-buffered "$LOGCAT_ALWAYSLOG\|$"
-		fi
-	else
-		if [ -n "$1" ]; then
-			$cmd | grep --color=never --line-buffered "E/AndroidRuntime\|E/ActivityThread\|W/System.err\|$LOGCAT_ALWAYSLOG\|`implode "\|" $*`" | GREP_COLOR="1;31" grep --color=always --line-buffered "E/[^:]*: \|$" | GREP_COLOR="1;33" grep --line-buffered --color=always "W/[^:]*: \|$" | GREP_COLOR="1;32" grep --color=always --line-buffered "D/[^:]*: \|$" | GREP_COLOR="1;90" grep --color=always --line-buffered "V/[^:]*: \|$" | GREP_COLOR="1;34" grep --color=always --line-buffered "I/[^:]*: \|$" | GREP_COLOR="1;36" grep --color=always --line-buffered "`implode "\|" $*`\|$" | GREP_COLOR="1;35" grep --color=always --line-buffered "$LOGCAT_ALWAYSLOG\|$"
-		else
-			$cmd | grep --color=never --line-buffered "E/AndroidRuntime\|E/ActivityThread\|W/System.err\|$LOGCAT_ALWAYSLOG" | GREP_COLOR="1;31" grep --color=always --line-buffered "E/[^:]*: \|$" | GREP_COLOR="1;33" grep --line-buffered --color=always "W/[^:]*: \|$" | GREP_COLOR="1;32" grep --color=always --line-buffered "D/[^:]*: \|$" | GREP_COLOR="1;90" grep --color=always --line-buffered "V/[^:]*: \|$" | GREP_COLOR="1;34" grep --color=always --line-buffered "I/[^:]*: \|$" | GREP_COLOR="1;35" grep --color=always --line-buffered "$LOGCAT_ALWAYSLOG\|$"
-		fi
-	fi
+    if [ -n "$THREADTIME" ]; then
+        if [ -n "$1" ]; then
+            $cmd | grep --color=never --line-buffered "E AndroidRuntime\|E ActivityThread\|W System.err\|$LOGCAT_ALWAYSLOG\|`implode "\|" $*`" | GREP_COLOR="1;31" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *E[^:]*: \|$" | GREP_COLOR="1;33" grep --line-buffered --color=always "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *W[^:]*: \|$" | GREP_COLOR="1;32" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *D[^:]*: \|$" | GREP_COLOR="1;90" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *V[^:]*: \|$" | GREP_COLOR="1;34" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *I[^:]*: \|$" | GREP_COLOR="1;36" grep --color=always --line-buffered "`implode "\|" $*`\|$" | GREP_COLOR="1;35" grep --color=always --line-buffered "$LOGCAT_ALWAYSLOG\|$"
+        else
+            $cmd | grep --color=never --line-buffered "E AndroidRuntime\|E ActivityThread\|W System.err\|$LOGCAT_ALWAYSLOG" | GREP_COLOR="1;31" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *E[^:]*: \|$" | GREP_COLOR="1;33" grep --line-buffered --color=always "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *W[^:]*: \|$" | GREP_COLOR="1;32" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *D[^:]*: \|$" | GREP_COLOR="1;90" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *V[^:]*: \|$" | GREP_COLOR="1;34" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *I[^:]*: \|$" | GREP_COLOR="1;35" grep --color=always --line-buffered "$LOGCAT_ALWAYSLOG\|$"
+        fi
+    else
+        if [ -n "$1" ]; then
+            $cmd | grep --color=never --line-buffered "E/AndroidRuntime\|E/ActivityThread\|W/System.err\|$LOGCAT_ALWAYSLOG\|`implode "\|" $*`" | GREP_COLOR="1;31" grep --color=always --line-buffered "E/[^:]*: \|$" | GREP_COLOR="1;33" grep --line-buffered --color=always "W/[^:]*: \|$" | GREP_COLOR="1;32" grep --color=always --line-buffered "D/[^:]*: \|$" | GREP_COLOR="1;90" grep --color=always --line-buffered "V/[^:]*: \|$" | GREP_COLOR="1;34" grep --color=always --line-buffered "I/[^:]*: \|$" | GREP_COLOR="1;36" grep --color=always --line-buffered "`implode "\|" $*`\|$" | GREP_COLOR="1;35" grep --color=always --line-buffered "$LOGCAT_ALWAYSLOG\|$"
+        else
+            $cmd | grep --color=never --line-buffered "E/AndroidRuntime\|E/ActivityThread\|W/System.err\|$LOGCAT_ALWAYSLOG" | GREP_COLOR="1;31" grep --color=always --line-buffered "E/[^:]*: \|$" | GREP_COLOR="1;33" grep --line-buffered --color=always "W/[^:]*: \|$" | GREP_COLOR="1;32" grep --color=always --line-buffered "D/[^:]*: \|$" | GREP_COLOR="1;90" grep --color=always --line-buffered "V/[^:]*: \|$" | GREP_COLOR="1;34" grep --color=always --line-buffered "I/[^:]*: \|$" | GREP_COLOR="1;35" grep --color=always --line-buffered "$LOGCAT_ALWAYSLOG\|$"
+        fi
+    fi
+}
+
+function get-process-list {
+    adb -s $1 shell ps | /bin/grep $2 | awk '{print $2}' | sed 's/\n/|/g' | tr "\\n" " " | sed "s/ $/\n/g" | sed "s/ /\\\\\\|/g"
+}
+
+function watch-process {
+    interval=1
+    if [ -n "$3" ]; then
+        interval=$3
+    fi
+    processes=`get-process-list $1 $2`
+    lastprocesses="$processes"
+    while [ -n "$processes" ] && [ "$processes" == "$lastprocesses" ]; do
+        sleep $interval
+        lastprocesses="$processes"
+        processes=`get-process-list $1 $2`
+    done
 }
 
 function eadb {
@@ -236,14 +254,19 @@ function eadb {
         fi
         shift
         device=$(eadb-select true)
-		pid="`adb -s $device shell ps | /bin/grep $1 | awk '{print $2}' | sed 's/\n/|/g' | tr "\\n" " " | sed "s/ $/\n/g" | sed "s/ /\\\\\\|/g"`"
-		echo "$1: Process $pid"
-		shift
-		if [ -n "$pid" ]; then
-        	adb -s $device logcat $* | /bin/grep "$pid"
-		else
-		echo "Process is not currently running."
-	fi
+        package="$1"
+        pid=`get-process-list $device $package`
+        echo "$1: Process $pid"
+        shift
+        if [ -n "$pid" ]; then
+            adb -s $device logcat $* | /bin/grep "$pid" &
+            pid=$!
+            watch-process $device $package
+            kill $pid
+            wait $! 2>/dev/null
+        else
+            echo "Process is not currently running."
+        fi
     elif [ "name" == "$1" ]; then
         device=$(eadb-select)
         read -p "Please provide a name for $device: " NAME
@@ -332,6 +355,13 @@ function eadb {
 		elif [ "clogcat" == "$1" ]; then
 			shift
 			clogcat $*
+        elif [ "$(type -t $1)" = function ]; then
+            cmd="$1"
+            shift
+            devices=`eadb-select true`
+            for device in $devices; do
+                $cmd $device $*
+            done
 		elif [ -n "$ADB_DEFAULT_DEVICE" ]; then
 			if [ "$EADB_SILENCE_DEFAULT_PROMPT" != "true" ]; then
 				echo "Running on: $ADB_DEFAULT_DEVICE"
