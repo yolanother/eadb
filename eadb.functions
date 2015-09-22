@@ -1,213 +1,235 @@
 [ -n "$BASH_VERSION" ] || [ -n "$ZSH_VERSION" ] || return
 
-function adb-push-with-devid {
-    local device=$1
-    shift
-    shift
-    local last="${@: -1}"
-    for file in "${@:1:($#-1)}"; do
-        echo -n 'Pushing '
-		echo -n $file
-		echo -n '->'
-		echo "$device:$last"
-		echo -n "  "
-        adb -s $device push "$file" "$last"
-    done
-}
-
-function eadb-select {
-    local dids=`adb devices 2>&1 | /bin/grep 'sideload$\|device$\|recovery$' | awk '{print $1}'`
-    if [ `echo "$dids" | wc -l` == "1" ]; then
-        name=`cat "$HOME/.eadb/$dids" 2>/dev/null`
-        if [ -n "$name" ]; then
-            echo "Only one device found using $name ($dids)" >&2
-        else
-            echo "Only one device found using $dids" >&2
-        fi
-        devid[0]="$dids"
-        DEVICE=0
-        DEV="$dids"
-        echo -n $DEV
-        return
-    fi
-
-    echo "Please select a device:" >&2
-    if [ "$1" == "true" ]; then
-        echo "  a) Run on all devices" >&2
-    fi
-    local devs=`adb devices 2>&1 | /bin/grep 'sideload$\|device$\|recovery$' | sed 's/.\(sideload\|device\|recovery\)/~\1/g'`
-    local d=1
-    for line in $devs; do
-        if [ "device" != "$line" ] && [ "recovery" != "$line" ] && [ "sideload" != "$line" ] && [ -n "$line"  ] ; then
-            mode[$d]=`echo "$line" | /bin/grep -o '~.*' | sed 's/^~//'`
-            line=`echo "$line" | sed 's/~.*//'`
-            devid[$d]="$line"
-            if [ "${mode[$d]}" == "device" ]; then
-                mod=`adb -s $line shell getprop ro.product.model`
-            else
-                mod=""
-            fi
-            modid[$d]="$mod"
-            if [ -f "$HOME/.eadb/$line" ]; then
-                name=`cat "$HOME/.eadb/$line"`
-                echo "  $d) $name - $line $mod" >&2
-            else
-                echo "  $d) $line $mod" >&2 
-            fi
-            d=`expr $d + 1`
-        fi
-    done
-
-    if [ "$d" == "2" ]; then
-        echo -n "${devid[1]}"
-    else
-        read -p "  Device Number: " device
-		if [ "a" == "$device" ]; then
-			adb devices 2>&1 | /bin/grep 'sideload$\|device$\|recovery$' | awk '{print $1}'
-		else
-	        echo "${devid[$device]}"
-		fi
-    fi
-}
-
-function clogcat-disable-timing {
-	if [ -f "$HOME/.eadb.logcat" ]; then
-	    if [ "$1" != "-q" ]; then
-            echo "Disabling timing"
-        fi
-		sed -i '/THREADTIME/d' $HOME/.eadb.logcat
-	fi
-}
-
-function clogcat-enable-timing {
-	clogcat-disable-timing -q
-    if [ "$1" != "-q" ]; then
-        echo "Enabling timing"
-    fi
-	echo 'THREADTIME="-v threadtime"' >> $HOME/.eadb.logcat
-}
-
-function clogcat-always-log-clear {
-	if [ -f "$HOME/.eadb.logcat" ]; then
-		sed -i '/LOGCAT_ALWAYSLOG/d' $HOME/.eadb.logcat
-	fi
-}
-
-function clogcat-always-log {
-	clogcat-always-log-clear
-	echo "LOGCAT_ALWAYSLOG=\"$1\"" >> $HOME/.eadb.logcat
-}
-
-function clogcat {
-	if [ -f "$HOME/.eadb.logcat" ]; then
-		source "$HOME/.eadb.logcat"
-	fi
-	
-	if [ "$(type -t clogcat$1)" = function ]; then
-	    clogcat$1
-	    return
-	fi
-
-	cmd="eadb logcat $THREADTIME"
-
-	if [ "$1" == "plogcat" ] || [ "$1" == "plog" ]; then
-		shift
-		if [ -n "$1" ]; then
-			cmd="eadb plogcat $1 $THREADTIME"
-			shift
-		fi
-	fi
-
-	if [ "$1" == "-" ]; then
-		cmd="read log"
-		shift
-	elif [ "http" == "${1:0:4}" ]; then
-		local filename="`echo $1 | sed 's/\//_/g'`"
-		if [ ! -f "/tmp/$filename" ]; then
-			curl $1 > "/tmp/$filename"
-			if [ -n "`grep "<title>401 - Unauthorized: Access is denied due to invalid credentials.</title>" /tmp/$filename`" ]; then
-				echo "Access denied. Could not retrieve log."
-				rm "/tmp/$filename"
-				return
-			fi
-		fi
-		cmd="cat /tmp/$filename"
-		shift
-	fi
-
-    if [ -n "$THREADTIME" ]; then
-        if [ -n "$1" ]; then
-            $cmd | grep --color=never --line-buffered "E AndroidRuntime\|E ActivityThread\|W System.err\|$LOGCAT_ALWAYSLOG\|`implode "\|" $*`" | GREP_COLOR="1;31" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *E[^:]*: \|$" | GREP_COLOR="1;33" grep --line-buffered --color=always "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *W[^:]*: \|$" | GREP_COLOR="1;32" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *D[^:]*: \|$" | GREP_COLOR="1;90" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *V[^:]*: \|$" | GREP_COLOR="1;34" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *I[^:]*: \|$" | GREP_COLOR="1;36" grep --color=always --line-buffered "`implode "\|" $*`\|$" | GREP_COLOR="1;35" grep --color=always --line-buffered "$LOGCAT_ALWAYSLOG\|$"
-        else
-            $cmd | grep --color=never --line-buffered "E AndroidRuntime\|E ActivityThread\|W System.err\|$LOGCAT_ALWAYSLOG" | GREP_COLOR="1;31" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *E[^:]*: \|$" | GREP_COLOR="1;33" grep --line-buffered --color=always "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *W[^:]*: \|$" | GREP_COLOR="1;32" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *D[^:]*: \|$" | GREP_COLOR="1;90" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *V[^:]*: \|$" | GREP_COLOR="1;34" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *I[^:]*: \|$" | GREP_COLOR="1;35" grep --color=always --line-buffered "$LOGCAT_ALWAYSLOG\|$"
-        fi
-    else
-        if [ -n "$1" ]; then
-            $cmd | grep --color=never --line-buffered "E/AndroidRuntime\|E/ActivityThread\|W/System.err\|$LOGCAT_ALWAYSLOG\|`implode "\|" $*`" | GREP_COLOR="1;31" grep --color=always --line-buffered "E/[^:]*: \|$" | GREP_COLOR="1;33" grep --line-buffered --color=always "W/[^:]*: \|$" | GREP_COLOR="1;32" grep --color=always --line-buffered "D/[^:]*: \|$" | GREP_COLOR="1;90" grep --color=always --line-buffered "V/[^:]*: \|$" | GREP_COLOR="1;34" grep --color=always --line-buffered "I/[^:]*: \|$" | GREP_COLOR="1;36" grep --color=always --line-buffered "`implode "\|" $*`\|$" | GREP_COLOR="1;35" grep --color=always --line-buffered "$LOGCAT_ALWAYSLOG\|$"
-        else
-            $cmd | grep --color=never --line-buffered "E/AndroidRuntime\|E/ActivityThread\|W/System.err\|$LOGCAT_ALWAYSLOG" | GREP_COLOR="1;31" grep --color=always --line-buffered "E/[^:]*: \|$" | GREP_COLOR="1;33" grep --line-buffered --color=always "W/[^:]*: \|$" | GREP_COLOR="1;32" grep --color=always --line-buffered "D/[^:]*: \|$" | GREP_COLOR="1;90" grep --color=always --line-buffered "V/[^:]*: \|$" | GREP_COLOR="1;34" grep --color=always --line-buffered "I/[^:]*: \|$" | GREP_COLOR="1;35" grep --color=always --line-buffered "$LOGCAT_ALWAYSLOG\|$"
-        fi
-    fi
-}
-
-function get-process-list {
-    adb -s $1 shell ps | /bin/grep $2 | awk '{print $2}' | sed 's/\n/|/g' | tr "\\n" " " | sed "s/ $/\n/g" | sed "s/ /\\\\\\|/g"
-}
-
-function watch-process {
-    interval=1
-    if [ -n "$3" ]; then
-        interval=$3
-    fi
-    processes=`get-process-list $1 $2`
-    lastprocesses="$processes"
-    while [ -n "$processes" ] && [ "$processes" == "$lastprocesses" ]; do
-        sleep $interval
-        lastprocesses="$processes"
-        processes=`get-process-list $1 $2`
-    done
-}
+# Note: functins leading with eadb_* or eadb-* will be used instead of being passed
+# to adb. eadb-* functions indicate a function that will have eadb-select run for them
+# before being executed. eadb_* functions will have to handle calling eadb-select on their own.
 
 function eadb {
-    if [ -z "$1" ]; then
-        eadb help
-        return;
-    fi
 
-    if [ "$1" == "shell" ] && [ "$2" == "pull" ]; then
+    function adb-push-with-devid {
+        local device=$1
         shift
-    fi
-
-    if [ "$1" == "shell" ] && [ "$2" == "push" ]; then
         shift
-    fi
+        local last="${@: -1}"
+        for file in "${@:1:($#-1)}"; do
+            echo -n 'Pushing '
+            echo -n $file
+            echo -n '->'
+            echo "$device:$last"
+            echo -n "  "
+            adb -s $device push "$file" "$last"
+        done
+    }
 
-	if [ "$1" == "--shortlist" ]; then
-		echo "`adb 2>&1 | /bin/grep -o '^  adb [^ ]*' | sed 's/^  adb //g' | sort | uniq | tr "\\n" " "` setdefault unsetdefault toggle-silent show-default name wait plogcat install-mirroring slogcat screenshot start input-text input-key clogcat"
-    elif [ "$1" == "unsetdefault" ]; then
-        unset ADB_DEFAULT_DEVICE
-        unset ADB_DEFAULT_MODEL
-	elif [ "$1" == "model" ]; then
-		if [ -z "$2" ]; then
-			eadb-select true | xargs -i adb -s {} shell getprop ro.product.model
-		else
-			adb -s "$2" shell getprop ro.product.model
-		fi
-    elif [ "$1" == "devices" ] || [ "$1" == "connect" ] || [ "$1" == "disconnect" ] || [ "$1" == '-s' ] || [ "$1" == "$d" ]; then
-        if [ "-s" == "$1" ] && [ "$3" == "push" ]; then
-            shift
-            local devid=$1
-            shift
-            adb-push-with-devid $devid $*
+    function eadb_select {
+        if [ -n "$ADB_DEFAULT_DEVICE" ]; then
+            echo "$ADB_DEFAULT_DEVICE"
         else
-            adb $*
+            local dids=`adb devices 2>&1 | /bin/grep 'sideload$\|device$\|recovery$' | awk '{print $1}'`
+            if [ `echo "$dids" | wc -l` == "1" ]; then
+                name=`cat "$HOME/.eadb/$dids" 2>/dev/null`
+                if [ -n "$name" ]; then
+                    echo "Only one device found using $name ($dids)" >&2
+                else
+                    echo "Only one device found using $dids" >&2
+                fi
+                devid[0]="$dids"
+                DEVICE=0
+                DEV="$dids"
+                echo -n $DEV
+                return
+            fi
+
+            echo "Please select a device:" >&2
+            if [ "$1" == "true" ]; then
+                echo "  a) Run on all devices" >&2
+            fi
+            local devs=`adb devices 2>&1 | /bin/grep 'sideload$\|device$\|recovery$' | sed 's/.\(sideload\|device\|recovery\)/~\1/g'`
+            local d=1
+            for line in $devs; do
+                if [ "device" != "$line" ] && [ "recovery" != "$line" ] && [ "sideload" != "$line" ] && [ -n "$line"  ] ; then
+                    mode[$d]=`echo "$line" | /bin/grep -o '~.*' | sed 's/^~//'`
+                    line=`echo "$line" | sed 's/~.*//'`
+                    devid[$d]="$line"
+                    if [ "${mode[$d]}" == "device" ]; then
+                        mod=`eadb_model-for $line`
+                    else
+                        mod=""
+                    fi
+                    modid[$d]="$mod"
+                    if [ -f "$HOME/.eadb/$line" ]; then
+                        name=`cat "$HOME/.eadb/$line"`
+                        echo "  $d) $name - $line $mod" >&2
+                    else
+                        echo "  $d) $line $mod" >&2 
+                    fi
+                    d=`expr $d + 1`
+                fi
+            done
+
+            if [ "$d" == "2" ]; then
+                echo -n "${devid[1]}"
+            else
+                read -p "  Device Number: " device
+                if [ "a" == "$device" ]; then
+                    adb devices 2>&1 | /bin/grep 'sideload$\|device$\|recovery$' | awk '{print $1}'
+                else
+                    echo "${devid[$device]}"
+                fi
+            fi
         fi
-    elif [ "start" == "$1" ]; then
-        shift
+    }
+
+    function clogcat-disable-timing {
+        if [ -f "$HOME/.eadb.logcat" ]; then
+            if [ "$1" != "-q" ]; then
+                echo "Disabling timing"
+            fi
+            sed -i '/THREADTIME/d' $HOME/.eadb.logcat
+        fi
+    }
+
+    function clogcat-enable-timing {
+        clogcat-disable-timing -q
+        if [ "$1" != "-q" ]; then
+            echo "Enabling timing"
+        fi
+        echo 'THREADTIME="-v threadtime"' >> $HOME/.eadb.logcat
+    }
+
+    function clogcat-always-log-clear {
+        if [ -f "$HOME/.eadb.logcat" ]; then
+            sed -i '/LOGCAT_ALWAYSLOG/d' $HOME/.eadb.logcat
+        fi
+    }
+
+    function clogcat-always-log {
+        clogcat-always-log-clear
+        echo "LOGCAT_ALWAYSLOG=\"$1\"" >> $HOME/.eadb.logcat
+    }
+
+    function clogcat {
+        if [ -f "$HOME/.eadb.logcat" ]; then
+            source "$HOME/.eadb.logcat"
+        fi
+        
+        if [ "$(type -t clogcat$1)" = function ]; then
+            clogcat$1
+            return
+        fi
+
+        local cmd="_eadb logcat $THREADTIME"
+
+        if [ "$1" == "plogcat" ] || [ "$1" == "plog" ]; then
+            shift
+            if [ -n "$1" ]; then
+                cmd="_eadb plogcat $1 $THREADTIME"
+                shift
+            fi
+        fi
+
+        if [ "$1" == "-" ]; then
+            cmd="read log"
+            shift
+        elif [ "http" == "${1:0:4}" ]; then
+            local filename="`echo $1 | sed 's/\//_/g'`"
+            if [ ! -f "/tmp/$filename" ]; then
+                curl $1 > "/tmp/$filename"
+                if [ -n "`grep "<title>401 - Unauthorized: Access is denied due to invalid credentials.</title>" /tmp/$filename`" ]; then
+                    echo "Access denied. Could not retrieve log."
+                    rm "/tmp/$filename"
+                    return
+                fi
+            fi
+            cmd="cat /tmp/$filename"
+            shift
+        fi
+
+        if [ -n "$THREADTIME" ]; then
+            if [ -n "$1" ]; then
+                $cmd | grep --color=never --line-buffered "E AndroidRuntime\|E ActivityThread\|W System.err\|$LOGCAT_ALWAYSLOG\|`implode "\|" $*`" | GREP_COLOR="1;31" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *E[^:]*: \|$" | GREP_COLOR="1;33" grep --line-buffered --color=always "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *W[^:]*: \|$" | GREP_COLOR="1;32" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *D[^:]*: \|$" | GREP_COLOR="1;90" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *V[^:]*: \|$" | GREP_COLOR="1;34" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *I[^:]*: \|$" | GREP_COLOR="1;36" grep --color=always --line-buffered "`implode "\|" $*`\|$" | GREP_COLOR="1;35" grep --color=always --line-buffered "$LOGCAT_ALWAYSLOG\|$"
+            else
+                $cmd | grep --color=never --line-buffered "E AndroidRuntime\|E ActivityThread\|W System.err\|$LOGCAT_ALWAYSLOG" | GREP_COLOR="1;31" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *E[^:]*: \|$" | GREP_COLOR="1;33" grep --line-buffered --color=always "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *W[^:]*: \|$" | GREP_COLOR="1;32" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *D[^:]*: \|$" | GREP_COLOR="1;90" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *V[^:]*: \|$" | GREP_COLOR="1;34" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *I[^:]*: \|$" | GREP_COLOR="1;35" grep --color=always --line-buffered "$LOGCAT_ALWAYSLOG\|$"
+            fi
+        else
+            if [ -n "$1" ]; then
+                $cmd | grep --color=never --line-buffered "E/AndroidRuntime\|E/ActivityThread\|W/System.err\|$LOGCAT_ALWAYSLOG\|`implode "\|" $*`" | GREP_COLOR="1;31" grep --color=always --line-buffered "E/[^:]*: \|$" | GREP_COLOR="1;33" grep --line-buffered --color=always "W/[^:]*: \|$" | GREP_COLOR="1;32" grep --color=always --line-buffered "D/[^:]*: \|$" | GREP_COLOR="1;90" grep --color=always --line-buffered "V/[^:]*: \|$" | GREP_COLOR="1;34" grep --color=always --line-buffered "I/[^:]*: \|$" | GREP_COLOR="1;36" grep --color=always --line-buffered "`implode "\|" $*`\|$" | GREP_COLOR="1;35" grep --color=always --line-buffered "$LOGCAT_ALWAYSLOG\|$"
+            else
+                $cmd | grep --color=never --line-buffered "E/AndroidRuntime\|E/ActivityThread\|W/System.err\|$LOGCAT_ALWAYSLOG" | GREP_COLOR="1;31" grep --color=always --line-buffered "E/[^:]*: \|$" | GREP_COLOR="1;33" grep --line-buffered --color=always "W/[^:]*: \|$" | GREP_COLOR="1;32" grep --color=always --line-buffered "D/[^:]*: \|$" | GREP_COLOR="1;90" grep --color=always --line-buffered "V/[^:]*: \|$" | GREP_COLOR="1;34" grep --color=always --line-buffered "I/[^:]*: \|$" | GREP_COLOR="1;35" grep --color=always --line-buffered "$LOGCAT_ALWAYSLOG\|$"
+            fi
+        fi
+    }
+
+    function eadb-get-process-list {
+        _eadb shell ps | /bin/grep $1 | awk '{print $2}' | sed 's/\n/|/g' | tr "\\n" " " | sed "s/ $/\n/g" | sed "s/ /\\\\\\|/g"
+    }
+
+    function eadb-watch-process {
+        interval=1
+        if [ -n "$2" ]; then
+            interval=$2
+        fi
+        processes=`get-process-list $1`
+        lastprocesses="$processes"
+        while [ -n "$processes" ] && [ "$processes" == "$lastprocesses" ]; do
+            sleep $interval
+            lastprocesses="$processes"
+            processes=`get-process-list $1`
+        done
+    }
+
+    function eadb_screenshot {
+        if [ -z "$1" ]; then
+           echo "Usage: eadb screenshot /path/to/screenshot.png"
+        else
+            device=$(eadb_select)
+            tmp=`mktemp`
+            echo "Grabbing screenshot..."
+            echo -n "  "
+            for device in `eadb_select true`; do
+                ADB_CURRENT_DEVICE=device
+                _eadb -s {} shell screencap -p /sdcard/`basename $tmp`
+                _eadb -s {} pull /sdcard/`basename $tmp` $1
+                _eadb -s {} shell rm /sdcard/`basename $tmp`
+            done
+            echo "  Screenshot stored in $1"
+        fi
+    }
+
+    function eadb_unsetdefault {
+        unset ADB_DEFAULT_DEVICE
+        unset ADB_DEFAULT_MODEL    
+    }
+
+    function eadb-model {
+        _eadb shell getprop ro.product.model
+    }
+
+    function eadb_model-for {
+        if [ ! -d "$HOME/.eadb" ]; then
+            mkdir "$HOME/.eadb"
+        fi
+
+        if [ ! -f "$HOME/.eadb/models" ]; then
+            touch $HOME/.eadb/models
+        fi
+
+        local model="`grep $1 $HOME/.eadb/models | awk '{ print substr($0, index($0,$2)) }' | uniq`"
+        if [ -z "$model" ]; then
+            model="`adb -s $1 shell getprop ro.product.model | awk '{ print substr($0, index($0,$0)) }'`"
+            if [ -n "$model" ]; then
+                printf "%-32s %s\n" "$1" "$model" >> ~/.eadb/models
+            fi
+        fi
+
+        echo "$model"
+    }
+
+    function eadb-start {
         if [ -z "$1" ]; then
             echo "Usage: eadb start application.package.name (applaction.package.name.activity)"
         else
-            device=$(eadb-select)
+            device=$(eadb_select)
             adb wait-for-device 2>/dev/null
             if [ -z "$2" ]; then
                 echo $device | xargs -i adb -s {} shell am start -a android.intent.action.MAIN -n $1
@@ -215,22 +237,9 @@ function eadb {
                 echo $device | xargs -i adb -s {} shell am start -n $1/$2
             fi
         fi
-    elif [ "screenshot" == "$1" ]; then
-        shift
-        if [ -z "$1" ]; then
-           echo "Usage: eadb screenshot /path/to/screenshot.png"
-        else
-            device=$(eadb-select)
-            tmp=`mktemp`
-            echo "Grabbing screenshot..."
-            echo -n "  "
-            echo $device | xargs -i adb -s {} shell screencap -p /sdcard/`basename $tmp`
-            echo $device | xargs -i adb -s {} pull /sdcard/`basename $tmp` $1
-            echo $device | xargs -i adb -s {} shell rm /sdcard/`basename $tmp`
-            echo "  Screenshot stored in $1"
-        fi
-    elif [ "slogcat" == "$1" ]; then
-        shift
+    }
+
+    function eadb-slogcat {
         if [ "$1" == "-p" ]; then
             shift
             command="plogcat $1"
@@ -243,23 +252,24 @@ function eadb {
         lcparams=`echo $@ | grep -o "[a-zA-Z0-9]*:[A-Z]"`
         search=`echo "$@" | sed 's/[A-Za-z0-9]*:[A-Z]//g' | sed 's/ /\\\\|[IDWEV]\//g' | sed 's/\\\\|\[IDWEV\]\/$//g'`
         if [ -z "$search" ]; then
-            eadb $command $lcparams
+            _eadb $command $lcparams
         else
-            eadb $command $lcparams | grep "E/AndroidRuntime\|[IDWEV]/$search"
+            _eadb $command $lcparams | grep "E/AndroidRuntime\|[IDWEV]/$search"
         fi
-    elif [ "plogcat" == "$1" ]; then
+    }
+
+    function eadb-plogcat {
         if [ -z "$2" ]; then
             echo "Usage: eadb plogcat com.some.package"
             return
         fi
         shift
-        device=$(eadb-select true)
         package="$1"
         pid=`get-process-list $device $package`
         echo "$1: Process $pid"
         shift
         if [ -n "$pid" ]; then
-            adb -s $device logcat $* | /bin/grep "$pid" &
+            _eadb logcat $* | /bin/grep "$pid" &
             pid=$!
             watch-process $device $package
             kill $pid
@@ -267,15 +277,9 @@ function eadb {
         else
             echo "Process is not currently running."
         fi
-    elif [ "name" == "$1" ]; then
-        device=$(eadb-select)
-        read -p "Please provide a name for $device: " NAME
-        if [ ! -d $HOME/.eadb ]; then
-            mkdir $HOME/.eadb 2>/dev/null
-        fi
-        echo "$NAME" > $HOME/.eadb/$device
-    elif [ "wait" == "$1" ]; then
-        shift
+    }
+
+    function eadb-wait {
         devid=""
         type="device"
         if [ "$1" == "-s" ]; then
@@ -291,8 +295,101 @@ function eadb {
         devinfo=`adb devices | /bin/grep -v "List of devices attached\|Only one device" | /bin/grep . | /bin/grep "$devid" | /bin/grep "$type" `
         if [ -z "$devinfo" ]; then
             sleep .5
-            eadb wait $*
+            _eadb wait $*
        fi
+    }
+
+    function eadb_setdefault {
+        export ADB_DEFAULT_DEVICE=`eadb_select true`
+    }
+
+    function eadb_name {
+        device=$(eadb_select)
+        read -p "Please provide a name for $device: " NAME
+        if [ ! -d $HOME/.eadb ]; then
+            mkdir $HOME/.eadb 2>/dev/null
+        fi
+        echo "$NAME" > $HOME/.eadb/$device
+    }
+
+    function eadb-install-mirroring {
+        _eadb -s $device shell sqlite3 /data/data/com.google.android.gsf/databases/gservices.db "INSERT INTO overrides (name, value) VALUES ('gms:cast:mirroring_enabled', 'true');"
+        _eadb -s $device shell sqlite3 /data/data/com.google.android.gsf/databases/gservices.db "UPDATE overrides SET value='true' WHERE name='gms:cast:mirroring_enabled';"
+        _eadb -s $device shell am force-stop com.google.android.gsf
+        _eadb -s $device shell am force-stop com.google.android.gms
+        _eadb -s $device shell am force-stop com.google.android.apps.chromecast.app
+    }
+
+    function eadb_showdefault {
+        if [ -z "$ADB_DEFAULT_DEVICE" ]; then
+            echo "No default device is currently set."
+        else
+            echo "Using default device $ADB_DEFAULT_DEVICE $ADB_DEFAULT_MODEL"
+        fi
+    }
+
+    function eadb-input-text {
+        _eadb shell input text $*
+    }
+
+    function eadb-input-key {
+        _eadb shell input keyevent $*
+    }
+
+    function eadb_toggle-silent {  
+        if [ -z "$EADB_SILENCE_DEFAULT_PROMPT" ]; then
+            EADB_SILENCE_DEFAULT_PROMPT=true
+        else
+            unset EADB_SILENCE_DEFAULT_PROMPT
+        fi
+    }
+
+    function eadb_push {
+        for device in `eadb_select true`; do
+            adb-push-with-devid $device $*
+        done
+    }
+
+    function eadb_devices {
+        adb devices | tail -n +2 | while read devout; do
+            device=`echo "$devout" | awk '{print $1}'`
+            status=`echo "$devout" | awk '{print $2}'`
+            if [ -n "$device" ]; then
+                model=`eadb_model-for "$device"`
+                name=""
+                if [ -f "$HOME/.eadb/$device" ]; then
+                    name=`cat "$HOME/.eadb/$device"`
+                fi
+                printf "%-32s %-10s %s\n" "$device" "$status" "$model"
+            fi
+        done
+    }
+
+    function _eadb {
+        echo "$ADB_CURRENT_DEVICE" | xargs -i adb -s {} $*
+    }
+
+    function eadb_commands {
+        adb 2>&1 | /bin/grep -o '^  adb [^ ]*' | sed 's/^  adb //g' | sort | uniq
+        typeset -F | awk '{print $3}' | /bin/grep eadb- | sed 's/^eadb-//g'
+        typeset -F | awk '{print $3}' | /bin/grep eadb_ | sed 's/^eadb_//g'
+    }
+
+    if [ -z "$1" ]; then
+        eadb help
+        return;
+    fi
+
+    if [ "$1" == "shell" ] && [ "$2" == "pull" ]; then
+        shift
+    fi
+
+    if [ "$1" == "shell" ] && [ "$2" == "push" ]; then
+        shift
+    fi
+
+    if [ "$1" == "--shortlist" ]; then
+        eadb_commands | sort | uniq | tr "\\n" " "
     elif [ "help" == "$1" ] || [ "-h" == "$1" ] || [ "--help" == "$1" ] || [ -z "$1" ]; then
             adb -h
             echo
@@ -312,85 +409,53 @@ function eadb {
             echo "  input-text                    - Enter text on the device"
             echo "  input-key                     - Send a key or set of keys"
     else
-        if [ -n "$ADB_DEFAULT_DEVICE" ] && [ "$1" != "setdefault" ]; then
-            if [ -z "$EADB_SILENCE_DEFAULT_PROMPT" ]; then
-                echo "Using default device $ADB_DEFAULT_DEVICE $ADB_DEFAULT_MODEL" >&2
-            fi
-            if [ "push" == "$1" ] && [ -n "$ADB_DEFAULT_DEVICE" ]; then
-                adb-push-with-devid $ADB_DEFAULT_DEVICE "$@"
-            else
-                adb -s $ADB_DEFAULT_DEVICE "$@"
-            fi
-        elif [ "$1" == "install-mirroring" ]; then
-        	device=`eadb-select`
-			adb -s $device shell sqlite3 /data/data/com.google.android.gsf/databases/gservices.db "INSERT INTO overrides (name, value) VALUES ('gms:cast:mirroring_enabled', 'true');"
-			adb -s $device shell sqlite3 /data/data/com.google.android.gsf/databases/gservices.db "UPDATE overrides SET value='true' WHERE name='gms:cast:mirroring_enabled';"
-			adb -s $device shell am force-stop com.google.android.gsf
-			adb -s $device shell am force-stop com.google.android.gms
-			adb -s $device shell am force-stop com.google.android.apps.chromecast.app
-        elif [ "show-default" == "$1" ]; then
-            if [ -z "$ADB_DEFAULT_DEVICE" ]; then
-                echo "No default device is currently set."
-            else
-                echo "Using default device $ADB_DEFAULT_DEVICE $ADB_DEFAULT_MODEL"
-            fi
-        elif [ "input-text" == "$1" ]; then
+        if [ "$(type -t eadb_$1)" = function ]; then
+            local cmd="$1"
             shift
-		    eadb shell input text $*
-        elif [ "input-key" == "$1" ]; then
+            eadb_$cmd $*
+        elif [ "$(type -t eadb-$1)" = function ]; then
+            local cmd="$1"
             shift
-            eadb shell input keyevent $*
-        elif [ "toggle-silent" == "$1" ]; then
-            if [ -z "$EADB_SILENCE_DEFAULT_PROMPT" ]; then
-                EADB_SILENCE_DEFAULT_PROMPT=true
-            else
-                unset EADB_SILENCE_DEFAULT_PROMPT
-            fi
-		elif [ "setdefault" == "$1" ]; then
-	        export ADB_DEFAULT_DEVICE=`eadb-select true`
-		elif [ "$1" == "push" ]; then
-			for device in `eadb-select true`; do
-				adb-push-with-devid $device $*
-			done
-		elif [ "clogcat" == "$1" ]; then
-			shift
-			clogcat $*
-        elif [ "$(type -t $1)" = function ]; then
-            cmd="$1"
-            shift
-            devices=`eadb-select true`
-            for device in $devices; do
-                $cmd $device $*
+
+            unset ADB_CURRENT_DEVICE
+
+            for device in `eadb_select true`; do
+                ADB_CURRENT_DEVICE="$device"
+                eadb-$cmd $*
             done
-		elif [ -n "$ADB_DEFAULT_DEVICE" ]; then
-			if [ "$EADB_SILENCE_DEFAULT_PROMPT" != "true" ]; then
-				echo "Running on: $ADB_DEFAULT_DEVICE"
-			fi
-			echo "$ADB_DEFAULT_DEVICE" | xargs -i adb -s {} $*
+
+            unset ADB_CURRENT_DEVICE
         else
-            eadb-select true | xargs -i adb -s {} $*
+            unset ADB_CURRENT_DEVICE
+
+            for device in `eadb_select true`; do
+                ADB_CURRENT_DEVICE="$device"
+                _eadb $*
+            done
+
+            unset ADB_CURRENT_DEVICE
         fi
     fi
 }
 
 _eadbcompletescript()
 {
- 	local path="`dirname $(readlink -f $0)`"
-	_script_commands=$(eadb --shortlist)
+     local path="`dirname $(readlink -f $0)`"
+    _script_commands=$(eadb --shortlist)
 
-	local cur prev
-	COMPREPLY=()
-	cur="${COMP_WORDS[COMP_CWORD]}"
-	prev="${COMP_WORDS[COMP_CWORD - 1]}"
-	if [ "push" == "$prev" ]; then
-		COMPREPLY=( $(compgen -W "`ls -d ${cur}*`" -- ${cur}) )
-	elif [ "pull" == "$prev" ]; then
-		COMPREPLY=( $(compgen -W "`adb shell 'ls -F ${cur} 2>/dev/null' | sed 's/\r//g' | sed 's_^\(ld\|d\) \(.*\)_\2_' | sed 's/^[-l?]* //g' | sort | uniq | tr "\\n" " "`" -- ${cur}) )
-	else
-		COMPREPLY=( $(compgen -W "${_script_commands}" -- ${cur}) )
-	fi
+    local cur prev
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD - 1]}"
+    if [ "push" == "$prev" ]; then
+        COMPREPLY=( $(compgen -W "`ls -d ${cur}*`" -- ${cur}) )
+    elif [ "pull" == "$prev" ]; then
+        COMPREPLY=( $(compgen -W "`adb shell 'ls -F ${cur} 2>/dev/null' | sed 's/\r//g' | sed 's_^\(ld\|d\) \(.*\)_\2_' | sed 's/^[-l?]* //g' | sort | uniq | tr "\\n" " "`" -- ${cur}) )
+    else
+        COMPREPLY=( $(compgen -W "${_script_commands}" -- ${cur}) )
+    fi
 
-	return 0
+    return 0
 }
 complete -o filenames -F _eadbcompletescript eadb
 
