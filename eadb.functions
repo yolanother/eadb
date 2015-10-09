@@ -80,7 +80,7 @@ function eadb {
         fi
     }
 
-    function clogcat-disable-timing {
+    function eadb_clogcat-disable-timing {
         if [ -f "$HOME/.eadb.logcat" ]; then
             if [ "$1" != "-q" ]; then
                 echo "Disabling timing"
@@ -89,7 +89,7 @@ function eadb {
         fi
     }
 
-    function clogcat-enable-timing {
+    function eadb_clogcat-enable-timing {
         clogcat-disable-timing -q
         if [ "$1" != "-q" ]; then
             echo "Enabling timing"
@@ -97,24 +97,24 @@ function eadb {
         echo 'THREADTIME="-v threadtime"' >> $HOME/.eadb.logcat
     }
 
-    function clogcat-always-log-clear {
+    function eadb_clogcat-always-log-clear {
         if [ -f "$HOME/.eadb.logcat" ]; then
             sed -i '/LOGCAT_ALWAYSLOG/d' $HOME/.eadb.logcat
         fi
     }
 
-    function clogcat-always-log {
+    function eadb_clogcat-always-log {
         clogcat-always-log-clear
         echo "LOGCAT_ALWAYSLOG=\"$1\"" >> $HOME/.eadb.logcat
     }
 
-    function clogcat {
+    function eadb-clogcat {
         if [ -f "$HOME/.eadb.logcat" ]; then
             source "$HOME/.eadb.logcat"
         fi
-        
-        if [ "$(type -t clogcat$1)" = function ]; then
-            clogcat$1
+
+        if [ "$(type -t eadb-clogcat$1)" = function ] && [ -n "$1" ]; then
+            eadb-clogcat$1
             return
         fi
 
@@ -123,7 +123,7 @@ function eadb {
         if [ "$1" == "plogcat" ] || [ "$1" == "plog" ]; then
             shift
             if [ -n "$1" ]; then
-                cmd="_eadb plogcat $1 $THREADTIME"
+                cmd="eadb-plogcat $1 $THREADTIME"
                 shift
             fi
         fi
@@ -144,7 +144,6 @@ function eadb {
             cmd="cat /tmp/$filename"
             shift
         fi
-
         if [ -n "$THREADTIME" ]; then
             if [ -n "$1" ]; then
                 $cmd | grep --color=never --line-buffered "E AndroidRuntime\|E ActivityThread\|W System.err\|$LOGCAT_ALWAYSLOG\|`implode "\|" $*`" | GREP_COLOR="1;31" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *E[^:]*: \|$" | GREP_COLOR="1;33" grep --line-buffered --color=always "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *W[^:]*: \|$" | GREP_COLOR="1;32" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *D[^:]*: \|$" | GREP_COLOR="1;90" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *V[^:]*: \|$" | GREP_COLOR="1;34" grep --color=always --line-buffered "^[^ ]* *[^ ]* *[^ ]* *[^ ]* *I[^:]*: \|$" | GREP_COLOR="1;36" grep --color=always --line-buffered "`implode "\|" $*`\|$" | GREP_COLOR="1;35" grep --color=always --line-buffered "$LOGCAT_ALWAYSLOG\|$"
@@ -169,12 +168,13 @@ function eadb {
         if [ -n "$2" ]; then
             interval=$2
         fi
-        processes=`get-process-list $1`
+        process="$1"
+        processes=`eadb-get-process-list "$process"`
         lastprocesses="$processes"
         while [ -n "$processes" ] && [ "$processes" == "$lastprocesses" ]; do
             sleep $interval
             lastprocesses="$processes"
-            processes=`get-process-list $1`
+            processes=`eadb-get-process-list "$process"`
         done
     }
 
@@ -259,23 +259,20 @@ function eadb {
     }
 
     function eadb-plogcat {
-        if [ -z "$2" ]; then
+        if [ -z "$1" ]; then
             echo "Usage: eadb plogcat com.some.package"
             return
         fi
-        shift
         package="$1"
-        pid=`get-process-list $device $package`
-        echo "$1: Process $pid"
-        shift
+        pid=`eadb-get-process-list $package`
         if [ -n "$pid" ]; then
             _eadb logcat $* | /bin/grep "$pid" &
             pid=$!
-            watch-process $device $package
+            eadb-watch-process $package
             kill $pid
             wait $! 2>/dev/null
         else
-            echo "Process is not currently running."
+            echo "Process for $1 is not currently running."
         fi
     }
 
