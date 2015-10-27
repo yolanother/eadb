@@ -40,10 +40,13 @@ function eadb {
                 return
             fi
 
-            echo "Please select a device:" >&2
-            if [ "$1" == "true" ]; then
-                echo "  a) Run on all devices" >&2
+            if [ "all" != "$1" ]; then
+                echo "Please select a device:" >&2
+                if [ "$1" == "true" ]; then
+                    echo "  a) Run on all devices" >&2
+                fi
             fi
+
             local devs=`adb devices 2>&1 | /bin/grep 'sideload$\|device$\|recovery$' | sed 's/.\(sideload\|device\|recovery\)/~\1/g'`
             local d=1
             for line in $devs; do
@@ -57,11 +60,13 @@ function eadb {
                         mod=""
                     fi
                     modid[$d]="$mod"
-                    if [ -f "$HOME/.eadb/$line" ]; then
-                        name=`cat "$HOME/.eadb/$line"`
-                        echo "  $d) $name - $line $mod" >&2
-                    else
-                        echo "  $d) $line $mod" >&2 
+                    if [ "all" != "$1" ]; then
+                        if [ -f "$HOME/.eadb/$line" ]; then
+                            name=`cat "$HOME/.eadb/$line"`
+                            echo "  $d) $name - $line $mod" >&2
+                        else
+                            echo "  $d) $line $mod" >&2 
+                        fi
                     fi
                     d=`expr $d + 1`
                 fi
@@ -70,8 +75,11 @@ function eadb {
             if [ "$d" == "2" ]; then
                 echo -n "${devid[1]}"
             else
-                read -p "  Device Number: " device
-                if [ "a" == "$device" ]; then
+                if [ "all" != "$1" ]; then
+                    read -p "  Device Number: " device
+                fi
+
+                if [ "a" == "$device" ] || [ "all" == "$1" ]; then
                     adb devices 2>&1 | /bin/grep 'sideload$\|device$\|recovery$' | awk '{print $1}'
                 else
                     echo "${devid[$device]}"
@@ -411,17 +419,39 @@ function eadb {
             shift
             eadb_$cmd $*
         elif [ "$(type -t eadb-$1)" = function ]; then
-            local cmd="$1"
-            shift
+            if [ "-s" == "$1" ] && [ "all" == "$2" ]; then
+                shift
+                shift
+                eadb_select
+                for device in `eadb_select true`; do
+                    ADB_CURRENT_DEVICE="$device"
+                    _eadb $*
+                done
 
-            unset ADB_CURRENT_DEVICE
+                local cmd="$1"
+                shift
 
-            for device in `eadb_select true`; do
-                ADB_CURRENT_DEVICE="$device"
-                eadb-$cmd $*
-            done
+                unset ADB_CURRENT_DEVICE
 
-            unset ADB_CURRENT_DEVICE
+                for device in `eadb_select true`; do
+                    ADB_CURRENT_DEVICE="$device"
+                    eadb-$cmd $*
+                done
+
+                unset ADB_CURRENT_DEVICE
+            else
+                local cmd="$1"
+                shift
+
+                unset ADB_CURRENT_DEVICE
+
+                for device in `eadb_select true`; do
+                    ADB_CURRENT_DEVICE="$device"
+                    eadb-$cmd $*
+                done
+
+                unset ADB_CURRENT_DEVICE
+            fi
         else
             unset ADB_CURRENT_DEVICE
 
@@ -437,6 +467,7 @@ function eadb {
 
 _eadbcompletescript()
 {
+    compopt +o default
      local path="`dirname $(readlink -f $0)`"
     _script_commands=$(eadb --shortlist)
 
@@ -444,8 +475,9 @@ _eadbcompletescript()
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD - 1]}"
-    if [ "push" == "$prev" ]; then
-        COMPREPLY=( $(compgen -W "`ls -d ${cur}*`" -- ${cur}) )
+    if [ "push" == "$prev" ] || [ "install" == "$prev" ]; then
+        compopt -o default
+        COMPREPLY=()
     elif [ "pull" == "$prev" ]; then
         COMPREPLY=( $(compgen -W "`adb shell 'ls -F ${cur} 2>/dev/null' | sed 's/\r//g' | sed 's_^\(ld\|d\) \(.*\)_\2_' | sed 's/^[-l?]* //g' | sort | uniq | tr "\\n" " "`" -- ${cur}) )
     else
