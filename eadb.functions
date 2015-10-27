@@ -190,15 +190,20 @@ function eadb {
         if [ -z "$1" ]; then
            echo "Usage: eadb screenshot /path/to/screenshot.png"
         else
-            device=$(eadb_select)
             tmp=`mktemp`
-            echo "Grabbing screenshot..."
             echo -n "  "
-            for device in `eadb_select true`; do
+            devices=`eadb_select true`
+            for device in $devices; do
+                local file="$1"
+                if [ "1" != `echo "$devices" | wc -l` ]; then
+                    file="`echo "$1" | cut -f 1 -d '.'`.$device.png"
+                fi
+
+                echo "Grabbing screenshot from $device --> $file"
                 ADB_CURRENT_DEVICE=device
-                _eadb -s {} shell screencap -p /sdcard/`basename $tmp`
-                _eadb -s {} pull /sdcard/`basename $tmp` $1
-                _eadb -s {} shell rm /sdcard/`basename $tmp`
+                _eadb -s $device shell screencap -p /sdcard/`basename $tmp`
+                _eadb -s $device pull /sdcard/`basename $tmp` $file
+                _eadb -s $device shell rm /sdcard/`basename $tmp`
             done
             echo "  Screenshot stored in $1"
         fi
