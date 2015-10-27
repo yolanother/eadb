@@ -1034,6 +1034,14 @@ function eadb {
         _eadb shell input keyevent $*
     }
 
+    function eadb-key {
+        _eadb shell input keyevent $*
+    }
+
+    function eadb-sendkey {
+        _eadb shell input keyevent $*
+    }
+
     function eadb_list-keys {
         if [ "$1" == "--shortlist" ]; then
             for key in ${KEYCODES[@]}; do
@@ -1185,7 +1193,7 @@ _eadbcompletescript()
         COMPREPLY=()
     elif [ "pull" == "$prev" ]; then
         COMPREPLY=( $(compgen -W "`adb shell 'ls -F ${cur} 2>/dev/null' | sed 's/\r//g' | sed 's_^\(ld\|d\) \(.*\)_\2_' | sed 's/^[-l?]* //g' | sort | uniq | tr "\\n" " "`" -- ${cur}) )
-    elif [ "input-key" == "$prev" ]; then
+    elif [ "input-key" == "$prev" ] || [ "key" == "$prev" ] || [ "sendkey" == "$prev" ]; then
         _keys=$(eadb list-keys --shortlist)
         COMPREPLY=( $(compgen -W "${_keys}" -- ${cur}) )
     else
