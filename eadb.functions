@@ -332,9 +332,14 @@ function eadb {
 
     function eadb_showdefault {
         if [ -z "$ADB_DEFAULT_DEVICE" ]; then
-            echo "No default device is currently set."
+            if [ "-q" != "$1" ]; then
+                echo "No default device is currently set." >&2
+            fi
         else
-            echo "Using default device $ADB_DEFAULT_DEVICE $ADB_DEFAULT_MODEL"
+            if [ "-q" != "$1" ]; then
+                echo -n "Default deivce: "  >&2
+            fi
+            echo "$ADB_DEFAULT_DEVICE $ADB_DEFAULT_MODEL"
         fi
     }
 
@@ -1193,7 +1198,8 @@ _eadbcompletescript()
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD - 1]}"
-    if [ "push" == "$prev" ] || [ "install" == "$prev" ]; then
+    prev2="${COMP_WORDS[COMP_CWORD - 2]}"
+    if [ "push" == "$prev" ] || [ "install" == "$prev" ] || [ "install" == "$prev2" ] && [ "-r" == "$prev" ]; then
         compopt -o default
         COMPREPLY=()
     elif [ "pull" == "$prev" ]; then
