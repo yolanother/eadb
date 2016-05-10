@@ -1073,7 +1073,6 @@ function eadb {
     }
 
     function eadb_push {
-        echo "First param: $1"
         for device in `eadb_select true`; do
             adb-push-with-devid $device "$@"
         done
